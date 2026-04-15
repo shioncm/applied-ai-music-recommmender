@@ -57,6 +57,92 @@ where:
 
 Songs to recommend are chosen based on the weighted score calculated for the song. For each song, the score will be calculated. These scored songs will then be ranked against each other.
 
+- Generated taste profile:
+
+```python
+user_prefs = {
+    "favorite_genre": "rock",
+    "favorite_mood": "intense",
+    "target_energy": 0.85,
+    "likes_acoustic": False,
+}
+```
+
+- Finalized "Algorithm Recipe"
+
+```python
+score(song, user) =
+    0.35 * genre_match(song, user)
+  + 0.30 * mood_match(song, user)
+  + 0.20 * energy_similarity(song, user)
+  + 0.15 * acoustic_match(song, user)
+```
+
+where:
+
+```python
+if song.genre == user.favorite_genre:
+  genre_match = 1.0
+else: 
+  genre_match = 0.0
+
+if song.mood  == user.favorite_mood:
+  mood_match = 1.0
+else: 
+  mood_match = 0.0
+
+energy_similarity = 1.0 - abs(song.energy - user.target_energy)
+
+if user.likes_acoustic:
+  acoustic_match = song.acousticness
+if not user.likes_acoustic
+  acoustic_match = 1.0 - song.acousticness
+```
+
+The following are potential biases to expect:
+- Genre dominance: at 35%, a genre match outweighs every other signal. A same-genre may outscore songs that match other features heavily.
+- String equality: genre and mood use string equality. However, this may mean adjacent values, such as "indie pop" and "pop," are evaluated as a complete mismatch.
+
+- Flowchart
+
+```bash
+flowchart TD
+    A["User Preferences
+    favorite_genre · favorite_mood
+    target_energy · likes_acoustic"] --> D
+    B["songs.csv"] --> C["Load all songs into list"]
+    C --> D{More songs\nto score?}
+
+    D -- Yes --> E["Take next song"]
+
+    E --> F{Genre match?}
+    F -- Yes --> G["+0.35"]
+    F -- No  --> H["+0.00"]
+
+    G --> I{Mood match?}
+    H --> I
+    I -- Yes --> J["+0.30"]
+    I -- No  --> K["+0.00"]
+
+    J --> L["+0.20 × (1.0 − |song.energy − target_energy|)"]
+    K --> L
+
+    L --> M{likes_acoustic?}
+    M -- Yes --> N["+0.15 × song.acousticness"]
+    M -- No  --> O["+0.15 × (1 − song.acousticness)"]
+
+    N --> P["Sum → song score (0.0 – 1.0)"]
+    O --> P
+
+    P --> Q["Append (song, score) to results"]
+    Q --> D
+
+    D -- No --> R["Sort results by score ↓"]
+    R --> S["Return top K songs"]
+```
+
+
+
 ---
 
 ## Getting Started
