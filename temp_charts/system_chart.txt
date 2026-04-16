@@ -1,0 +1,81 @@
+flowchart TD
+    subgraph HUMAN["👤 Human Layer"]
+        A["Natural Language Query
+        e.g. 'chill study music for late night'"]
+        N["Personalized Narrative Response
+        references each song by name and explains fit"]
+    end
+
+    subgraph IDEA1A["Idea 1 — Query Parsing  ·  Claude API"]
+        B["LLM: Claude
+        extract structured preferences
+        from natural language"]
+        C["UserProfile
+        { genre · mood · energy · likes_acoustic }"]
+    end
+
+    subgraph DATA["Existing — Data Layer"]
+        D["data/songs.csv
+        18 songs"]
+        E["load_songs()
+        recommender.py"]
+        F["Song Catalog
+        List[Dict]"]
+    end
+
+    subgraph IDEA2["Idea 2 — Semantic Embedder + Index  ·  sentence-transformers"]
+        G["Embedding Model
+        all-MiniLM-L6-v2
+        encode genre + mood fields"]
+        H["In-Memory Vector Store
+        one embedding per song"]
+        I["Semantic Retriever
+        cosine similarity vs. query genre/mood"]
+        J["Soft Match Scores
+        float 0–1, replaces binary string match"]
+    end
+
+    subgraph SCORING["Existing — Scoring Engine  (modified)"]
+        K["score_song()
+        weighted formula now uses
+        soft semantic scores for genre + mood"]
+        L["recommend_songs()
+        sorted top-k results"]
+    end
+
+    subgraph IDEA1B["Idea 1 — Response Generation  ·  Claude API"]
+        M["LLM: Claude
+        receives: original query + top-k songs + scores
+        generates narrative that cites each song directly"]
+    end
+
+    subgraph TESTING["Human & Automated Evaluation"]
+        T1["pytest
+        unit tests: loader · scorer · soft-match"]
+        T2["LLM Output Review
+        does parsed profile match query intent?"]
+        T3["Human Spot-Check
+        does narrative accurately reflect
+        the retrieved songs?"]
+    end
+
+    A --> B
+    B --> C
+    D --> E --> F
+    F --> G --> H
+    C --> I
+    H --> I
+    I --> J
+    C --> K
+    J --> K
+    F --> K
+    K --> L
+    L --> M
+    A --> M
+    C --> M
+    M --> N
+    N --> T3
+    T1 -.->|validates| K
+    T1 -.->|validates| L
+    T1 -.->|validates| I
+    T2 -.->|validates| C
