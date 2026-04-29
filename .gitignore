@@ -13,3 +13,9 @@ venv/
 
 # Pytest cache
 .pytest_cache/
+
+# Session logs (may contain user queries)
+logs/
+
+# API keys
+.env

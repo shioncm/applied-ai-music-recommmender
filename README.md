@@ -1,442 +1,201 @@
-# 🎵 Music Recommender Simulation
+# Song Seeker: Music Recommender with RAG
 
-## Project Summary
+## 1. Original Project: Song Seeker
 
-In this project you will build and explain a small music recommender system.
+The original Song Seeker was a content-based music recommender that scored an 18-song catalog against a user profile. The profile held four attributes (favorite genre, favorite mood, target energy level, and acoustic preference) and each song was ranked using a fixed weighted formula:
 
-Your goal is to:
-
-- Represent songs and a user "taste profile" as data
-- Design a scoring rule that turns that data into recommendations
-- Evaluate what your system gets right and wrong
-- Reflect on how this mirrors real world AI recommenders
-
-Replace this paragraph with your own summary of what your version does.
-
-This recommender scores songs from an 18-song catalog against a user profile with four attributes: genre, mood, energy level, and acoustic preference. Each song gets a weighted score and the top five results are returned. Seven test profiles were used to evaluate whether the system behaved as expected.
-
----
-
-## How The System Works
-
-- How do real-world recommendations work?
-
-Real-world music recommendation platforms use a hybrid model. For new users, content-based filtering is used. As data accumulates, the model shifts toward collaborative filtering for discovery. For established users, a blended apporach of both collaborative and content-based filtering is used.
-
-- What features does each `Song` use in your system
-  - For example: genre, mood, energy, tempo
-
-This sytem makes recommendations primarily with content-based filtering, using song attributes. The features used are as follows, ordered by weight:
-1. `genre`: Most intuitive user preference. Seven distinct values across ten songs, strong differentiator.
-2. `mood`: Context indicator, six distinct values across 10 songs. 
-3. `energy`: Wide range (0.28 - 0.93), cleanly separates calm songs from intense ones.
-4. `acousticness`: Wide range (0.05 - 0.92), cleanly separates acoustic songs from those that are not.
-5. `tempo_bpm`: Adds nuance to `energy`. Good secondary signal.
-6. `valence`: Correlated with `mood`. Separates emotionally positive from darker-toned songs. Good secondary signal.
-
-- What information does your `UserProfile` store
-
-The `UserProfile` stores the following:
-1. favorite_genre: string value for the user's preferred genre
-2. favorite_mood: string value for the user's preferred mood
-3. target_energy_level: float value (0-1) for the user's desired energy level
-4. likes_acousitc: boolean value for whether the user preferes acoustic over produced
-
-- How does your `Recommender` compute a score for each song
-
-A simple weighted score will be computed as follows:
-
-`score = 0.35 * genre_match + 0.30 * mood_match + 0.20 * energy_similarity + 0.15 * acoustic_match`
-
-where:
-
-`genre_match: 1.0 if match, 0.0 if not`  
-`mood_match: 1.0 if match, 0.0 if not`  
-`energy_similarity: 1 - abs(user_energy - song_energy)`  
-`acoustic_match: based on likes_acoustic vs acousticness`   
-
-- How do you choose which songs to recommend
-
-Songs to recommend are chosen based on the weighted score calculated for the song. For each song, the score will be calculated. These scored songs will then be ranked against each other.
-
-### Generated taste profile:
-
-```python
-{
-  "name": "Default Pop / Happy",
-  "favorite_genre": "pop",
-  "favorite_mood": "happy",
-  "target_energy": 0.8,
-  "likes_acoustic": False,
-}
+```
+score = 0.35 * genre_match + 0.30 * mood_match + 0.20 * energy_similarity + 0.15 * acoustic_match
 ```
 
-### Finalized "Algorithm Recipe"
+The top five results were returned for each profile.
 
-```python
-score(song, user) =
-    0.35 * genre_match(song, user)
-  + 0.30 * mood_match(song, user)
-  + 0.20 * energy_similarity(song, user)
-  + 0.15 * acoustic_match(song, user)
-```
+Seven test profiles evaluated the system: four standard (Default Pop / Happy, High-Energy Pop, Chill Lofi, Deep Intense Rock) and three adversarial edge cases (Sad Bangers, Ghost Genre, Acoustic Electronic). The original score system became the retrieval engine for the current system.
 
-where:
+## 2. What This Project Does
 
-```python
-if song.genre == user.favorite_genre:
-  genre_match = 1.0
-else: 
-  genre_match = 0.0
+Song Seeker now accepts natural language. Instead of a preset of profiles, you give a description, such as "something calm for late-night studying" and the system retrieves five songs that best fit the query.
 
-if song.mood  == user.favorite_mood:
-  mood_match = 1.0
-else: 
-  mood_match = 0.0
+A Retrieval-Augmented Generation (RAG) pipeline wraps the original weighted scorer on both ends: one LLM call parses the natural language query into a structured profile, and a second narrates why the retrieved songs match the request. A confidence guardrail sits between retrieval and generation, blocking low-quality matches before they reach the narrator so the output does not hallucinate.
 
-energy_similarity = 1.0 - abs(song.energy - user.target_energy)
+The RAG pipeline is accessible two ways: a terminal chat loop (`python -m src.main --chat`) and a Streamlit web app (`streamlit run src/app.py`). Both run the same five-step pipeline; the web app adds a browser UI with metric cards for the profile, expandable song results, and narrative description.
 
-if user.likes_acoustic:
-  acoustic_match = song.acousticness
-if not user.likes_acoustic
-  acoustic_match = 1.0 - song.acousticness
-```
+## 3. Architecture Overview
 
-The following are potential biases to expect:
-- Genre dominance: at 35%, a genre match outweighs every other signal. A same-genre may outscore songs that match other features heavily.
-- String equality: genre and mood use string equality. However, this may mean adjacent values, such as "indie pop" and "pop," are evaluated as a complete mismatch.
+The system runs in two modes.
 
-### Flowchart (Mermaid.js)
+**Batch mode** (default) feeds seven test profiles into the weighted scorer and prints rankings. No API key is required.
 
-```bash
+**Chat mode** (`--chat`) runs the full five-step RAG pipeline:
+
+1. `parse_query` sends the query to **Gemini 2.5 Flash Lite** and receives a validated `UserProfile` JSON (genre, mood, energy, acoustic).
+2. `recommend_songs` scores every song in `songs.csv` and returns the top-5 results with scores and match reasons.
+3. `check_confidence` evaluates the top score. Below 0.30, the session is blocked. Between 0.30 and 0.50, a partial-match warning is surfaced but the pipeline continues.
+4. `narrate_recommendations` streams a grounded explanation from **Gemini 2.5 Flash Lite**, citing each retrieved song by name and using the score data to justify every claim.
+5. `log_session` appends the full session record (query, inferred profile, retrieved songs, confidence result, and narrative) to `logs/sessions.log`.
+
+```mermaid
 flowchart TD
-    A["User Preferences
-    favorite_genre · favorite_mood
-    target_energy · likes_acoustic"] --> D
-    B["songs.csv"] --> C["Load all songs into list"]
-    C --> D{More songs\nto score?}
+    subgraph DATA ["Data Layer"]
+        CSV[(songs.csv · 18 songs)] --> LOAD["load_songs\nrecommender.py"]
+        LOAD --> CAT["Song Catalog\nList of Dicts"]
+    end
 
-    D -- Yes --> E["Take next song"]
+    subgraph CHAT ["RAG Chat Mode  (--chat flag)"]
+        U([Human User]) -->|"natural language query\ne.g. 'late night chill study music'"| PQ
+        PQ["parse_query\nGemini 2.5 Flash Lite\nLLM Parser"] --> UP["Structured UserProfile\ngenre · mood · energy · acoustic"]
+        UP --> RS1["recommend_songs\nWeighted Scorer\n0.35·genre + 0.30·mood\n+ 0.20·energy + 0.15·acoustic"]
+        RS1 --> CC{"check_confidence\nGuardrail"}
+        CC -->|"top score < 0.30\n→ blocked"| WARN["⚠ Warning to User\n(no narrative)"]
+        CC -->|"top score ≥ 0.30\n→ passed"| NR["narrate_recommendations\nGemini 2.5 Flash Lite\nStreaming Narrator"]
+        NR -->|"streamed narrative"| U
+        WARN --> LOG["log_session\nlogs/sessions.log"]
+        NR --> LOG
+    end
 
-    E --> F{Genre match?}
-    F -- Yes --> G["+0.35"]
-    F -- No  --> H["+0.00"]
+    CAT --> RS1
 
-    G --> I{Mood match?}
-    H --> I
-    I -- Yes --> J["+0.30"]
-    I -- No  --> K["+0.00"]
+    subgraph BATCH ["Batch Mode  (default, no --chat)"]
+        PP["7 Preset Profiles\n4 standard · 3 adversarial edge-case"] --> RS2["recommend_songs\nWeighted Scorer"]
+        RS2 --> CLI["CLI Rankings\nTop-5 Songs + Scores"]
+    end
 
-    J --> L["+0.20 × (1.0 − |song.energy − target_energy|)"]
-    K --> L
+    CAT --> RS2
 
-    L --> M{likes_acoustic?}
-    M -- Yes --> N["+0.15 × song.acousticness"]
-    M -- No  --> O["+0.15 × (1 − song.acousticness)"]
-
-    N --> P["Sum → song score (0.0 – 1.0)"]
-    O --> P
-
-    P --> Q["Append (song, score) to results"]
-    Q --> D
-
-    D -- No --> R["Sort results by score ↓"]
-    R --> S["Return top K songs"]
+    subgraph EVAL ["Human Evaluation & Testing"]
+        DEV([Developer]) -->|"hand-crafted adversarial\ntest profiles"| PP
+        PYTEST["pytest\ntests/test_recommender.py"] -.->|"validates score_song\n& recommend_songs"| RS2
+        DEV -.->|"inspects session logs"| LOG
+        DEV -.->|"reviews CLI output"| CLI
+    end
 ```
 
-### CLI Verification
+## 4. Setup
 
-![phase3](./phase3_output.png)
+**Prerequisites:** Python 3.9+ · A Gemini API key (chat mode only)
 
+### Installation
 
+1. Clone the repository:
+   ```bash
+   git clone <repo-url>
+   cd applied-ai-music-recommmender
+   ```
 
----
-
-## Getting Started
-
-### Setup
-
-1. Create a virtual environment (optional but recommended):
-
+2. Create and activate a virtual environment:
    ```bash
    python -m venv .venv
-   source .venv/bin/activate      # Mac or Linux
+   source .venv/bin/activate      # Mac / Linux
    .venv\Scripts\activate         # Windows
+   ```
 
-2. Install dependencies
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Create a `.env` file in the project root and add your Gemini API key (required for chat mode only):
+   ```
+   GEMINI_API_KEY=your-key-here
+   ```
+
+### Running the app
 
 ```bash
-pip install -r requirements.txt
-```
-
-3. Run the app:
-
-```bash
+# Batch mode: runs all 7 preset profiles, no API key needed
 python -m src.main
+
+# Chat mode: natural language queries in the terminal
+python -m src.main --chat
+
+# Web UI: Streamlit app with the same RAG pipeline
+streamlit run src/app.py
 ```
 
-### Running Tests
-
-Run the starter tests with:
+### Running tests
 
 ```bash
-pytest
+python -m pytest
 ```
 
-You can add more tests in `tests/test_recommender.py`.
+## 5. Sample Interactions
 
----
+Scores are calculated from the actual weighted formula against `data/songs.csv`. The screenshots below are examples of inputs and the resulting AI outputs in the streamlit app.
 
-## Experiments You Tried
+### Example 1: Strong match (Late-night study session)
 
-Use this section to document the experiments you ran. For example:
+The query maps cleanly to lofi/chill. Library Rain and Midnight Coding are the only two songs that match on both genre and mood, putting them far ahead of the rest of the catalog.
 
-- What happened when you changed the weight on genre from 0.35 to 0.15
+![Song Seeker Calm and Acoustic Input](./assets/song-seeker_example1.png)
 
-Decreasing the weight on genre allows high-energy songs from completely unrelated genres flood mid-rank slots. For instance, "Gym Hero" now ranks second in the "Deep Intense Rock" category.
+### Example 2: Strong match (Acoustic specification)
 
-- What happened when you changed the weight on energy from 0.20 to 0.40
+The query specifies "no acoustic stuff," and the application successfully returns songs that all have low acousticness scores.
 
-Increasing the weight for energy adds nuance within a genre cluster. It improves accuracy for categories like "High Energy Pop"
+![Song Seeker No Acoustic Input](./assets/song-seeker_example2.png)
 
-- How did your system behave for different types of users
+### Example 3: Batch mode (Ghost genre edge case)
 
-Profiles with popular genres like lofi and pop received the most relevant results because those genres had multiple catalog entries. A profile requesting a genre not in the catalog received results based entirely on mood and energy.
+`favorite_genre = "k-pop"` does not exist in the catalog. Genre weight (0.35) is dead for every song. Results compete on mood, energy, and acoustic preference only, with a score ceiling of ~0.65. This profile passes the confidence guardrail, but the batch runner shows the degradation clearly.
 
-### Results of Stress Testing with Diverse Profiles
+![Ghost Genre batch output](./phase4_ghost_genre_output.png)
 
-![phase_4_chill_lofi](./phase4_chill_lofi_output.png)
-![phase_4_default_pop](./phase4_default_pop_output.png)
-![phase_4_high_energy](./phase4_high_energy_output.png)
-![phase_4_intense_rock](./phase4_intense_rock_output.png)
-![phase_4_electronic](./phase4_electronic_output.png)
-![phase4_ghost_genre](./phase4_ghost_genre_output.png)
-![phase_4_sad_bangers](./phase4_sad_bangers_output.png)
+## 6. Design Decisions
 
+**Why keep the original weighted scorer instead of replacing it with embeddings?**
 
----
+The original scorer is deterministic, meaning every recommendation can be fully explained by the formula. Wrapping it with an LLM on both ends achieves a natural language interface without changing the retrieval logic. This separation also makes the confidence guardrail interpretable: scores fall on a known 0–1 scale, so thresholds at 0.30 and 0.50 have a clear meaning.
 
-## Limitations and Risks
+**Why Gemini 2.5 Flash Lite for both the parser and the narrator?**
 
-Summarize some limitations of your recommender.
+Gemini 2.5 Flast Lite provides high speed and low cost. The parser only needs a structured JSON response, which Flash Lite produces reliably. The narrator needs streaming, which Flash Lite also supports. Using the same model for both roles reduces the number of API integrations without sacrificing quality at this catalog size.
 
-The catalog only has 18 songs, so most genres and moods appear just once. The system does not consider lyrics, tempo, or emotional nuance. Genre is matched as an exact string, so related genres like rock and metal are treated as completely different.
+**The main trade-off** is in the confidence thresholds. The values (0.30 and 0.50) were derived from observations during stress testing on this specific 18-song catalog. They would need recalibration if the catalog grew significantly, since the score distributions would shift as more songs become available for each genre and mood.
 
----
+## 7. Testing Summary
 
-## Reflection
+27 out of 27 tests passed across two files: `test_recommender.py` (15 tests covering `score_song`, `recommend_songs`, and `load_songs`) and `test_rag.py` (12 tests covering confidence guardrail boundary conditions and session logging). All confidence threshold boundaries were verified explicitly at 0.30 and 0.50, confirming correct block/warn/pass behavior at edge values. One caveat: the OOP `Recommender` class uses stub implementations; its two tests pass but cover placeholder behavior rather than production logic.
 
-Read and complete `model_card.md`:
+**What worked:**
 
-[**Model Card**](model_card.md)
+The four standard profiles consistently returned the expected top result. Chill Lofi ranked Library Rain and Midnight Coding first and second in every run. The LLM parser correctly mapped natural language to valid catalog attributes across a range of phrasings, including vague requests like "vibes for a dinner party" and direct ones like "maximum intensity metal."
 
-Write 1 to 2 paragraphs here about what you learned:
+**What didn't:**
 
-- about how recommenders turn data into predictions
+The three adversarial profiles exposed the limits of binary string-matching. Sad Bangers, a profile with a sad mood and extreme high energy, was at 0.70 because no catalog song is simultaneously sad and high-energy. Ghost Genre was at 0.62 since no songs share the k-pop genre label. The confidence guardrail correctly surfaces these weak matches, but the system has no way to suggest a broader alternative or explain why the catalog lacks a better fit.
 
-Recommenders turn data into predictions by assigning weights to features and computing how closely each item matches a user profile. This system shows that even a simple scoring algorithm can produce reasonable results, but the quality depends heavily on the catalog.
+**What I learned:**
 
-- about where bias or unfairness could show up in systems like this
+Binary genre and mood fields are the scorer's most significant weakness. When a query maps to a genre underrepresented in the catalog, the ranker has no fallback except energy and acousticness. Adding semantic matching between related genres like "rock" and "metal" would address.
 
-Bias appears when the catalog does not represent all preferences equally. Users with rare genre or mood preferences get weaker results after the first match, while lofi fans benefit from three catalog entries.
+## 8. Reflection
 
+Building the RAG layer on top of the prototype made the system feel qualitatively different, even though the scorer did not change. The LLM parser absorbs the ambiguity of natural language and produces a structured profile in under a second. The narrator grounds its explanation in the actual retrieved songs rather than inventing attributes. Together, they transform a rigid batch process into something that feels conversational, which is a meaningful shift in user experience from the same underlying logic.
 
----
+The confidence guardrail was the most instructive part of the build. It reinforced the importance of not instinctively trusting the output when building reliable AI systems.
 
-## 7. `model_card_template.md`
+The catalog's sparsity also reinforces the importance of data quality in shaping user experience.Realrecommendation systems invest heavily in catalog coverage for this reason.
 
-Combines reflection and model card framing from the Module 3 guidance. :contentReference[oaicite:2]{index=2}  
+## 9. Reflection and Ethics: Thinking Critically About Your AI
 
-```markdown
-# 🎧 Model Card - Music Recommender Simulation
+**What are the limitations or biases in your system?**
 
-## 1. Model Name
+The two most significant limitations are catalog sparsity and binary matching. Thirteen of the fifteen genres appear only once, so the scorer's behavior degrades quickly for any query outside pop or lofi. Genre and mood are matched with exact string equality, meaning a fan of "indie pop" gets no credit toward a "pop" query, and "metal" and "rock" are treated as completely unrelated. The scoring weights (0.35 for genre, 0.30 for mood, etc.) were set based on intuition, not learned from data. Because the weights were not derived from user behavior, they may not reflect how actual people prioritize these features. The acoustic preference is also a binary flag, meaning the system treats every user as either an acoustic fan or a non-acoustic fan.
 
-Give your recommender a name, for example:
+**Could your AI be misused, and how would you prevent that?**
 
-> TuneRecipe
+The most realistic misuse risk is confidence in a wrong result. The LLM narrator uses actual retrieved songs and cannot suggest songs not in the retrieved list. However, it still produces a polished explanation even when the underlying match is mediocre. A user might read the narrative and trust that the songs genuinely fit their request.
 
----
+**What surprised you while testing reliability?**
 
-## 2. Intended Use
+The quality of results below the top one or two was surprising. Once the genre and mood bonus were used, slots three through five were filled mostly by energy proximity, and those recommendations may be arbitrary.
 
-- What is this system trying to do
+**Collaboration with AI during this project**
 
-The recommender suggests the top five songs from an 18-song catalog. Recommendations are based on how closely each song matches the user's preferred genre, mood, energy level, and acoustic taste.
+AI was useful throughout the build, but not uniformly. One genuinely helpful suggestion was using the `response_schema` parameter in the Gemini API call for `parse_query`. Rather than prompting the model to return JSON and then manually parsing and validating it, the `response_schema` parameter accepts the Pydantic model directly and guarantees the output matches the schema. This removed the need for parsing errors.
 
-- Who is it for
+One suggestion that was flawed was early in the design, AI recommended adding semantic embeddings for genre and mood matching to replace the binary string equality. That is a real limitation of the current system, but the proposed fix was far too complicated for an 18-song catalog. The complexity was not proportionate to the problem.
 
-The recommender is primarily built for people interested in recommendation system implemntations, as this is built for classroom exploration. It is a simulation, not a tool meant for real listeners.
+## Links
 
-Example:
-
-> This model suggests 3 to 5 songs from a small catalog based on a user's preferred genre, mood, and energy level. It is for classroom exploration only, not for real users.
-
----
-
-## 3. How It Works (Short Explanation)
-
-Describe your scoring logic in plain language.
-
-- What features of each song does it consider
-
-Four features are used: genre, mood, energy, and acousticness. Genre and mood are checked for an exact match. Energy is a number from 0 to 1. Acousticness measures how acoustic-sounding the song is.
-
-- What information about the user does it use
-
-The user provides a favorite genre, a favorite mood, a target energy level, and whether they prefer acoustic or non-acoustic music.
-
-- How does it turn those into a number
-
-Each feature that matches or is close to the user's preference adds points. Genre adds the most, then mood, then energy, then acousticness. The scores are added up and the top five songs are returned.
-
-Try to avoid code in this section, treat it like an explanation to a non programmer.
-
----
-
-## 4. Data
-
-Describe your dataset.
-
-- How many songs are in `data/songs.csv`
-
-There are 18 songs. Each has a title, artist, genre, mood, energy level, tempo, valence, danceability, and acousticness score.
-
-- Did you add or remove any songs
-
-Songs were added to the original starter CSV file during development. No songs were removed. The additions helped cover more genres and moods.
-
-- What kinds of genres or moods are represented
-
-Genres include pop, lofi, rock, metal, jazz, blues, hip-hop, electronic, classical, reggae, and others. Moods include happy, chill, intense, sad, angry, melancholic, peaceful, and more. Most appear only once.
-
-- Whose taste does this data mostly reflect
-
-This recommender mostly reflects pop or lofi fans that prefer a happy or chill mood.
-
----
-
-## 5. Strengths
-
-Where does your recommender work well
-
-- User types for which it gives reasonable results  
-
-Lofi and pop fans get the best results because those genres have multiple catalog entries, ensuring a strong top result.
-
-- Any patterns you think your scoring captures correctly  
-
-The scoring correctly highly scores songs that match on multiple dimensions at once. A song with the right genre, right mood, and close energy will always beat one that only matches on one of those.
-
-- Cases where the recommendations matched your intuition  
-
-The Chill Lofi profile returned Library Rain and Midnight Coding at the top, which makes sense. Deep Intense Rock surfaced Storm Runner first, the only rock song, as expected.
-
----
-
-## 6. Limitations and Bias
-
-Where does your recommender struggle
-
-- Features it does not consider  
-
-Valence, danceability, and tempo are loaded for every song but never used in scoring.
-
-- Genres or moods that are underrepresented  
-
-13 of the 15 genres appear only once in the catalog, and most moods are equally sparse. 
-
-- Cases where the system overfits to one preference  
-
-Once genre is exhausted, the remaining slots are filled by whichever songs have the closest energy level. A rock fan and a reggae fan end up with nearly identical second-through-fifth recommendations.
-
-- Ways the scoring might unintentionally favor some users  
-
-The exact genre match penalizes users whose preferences do not align with the catalog's labels. A fan of metal is not recommended a rock song, while a lofi fan benefits from the three catalog entries.
-
-- What is one weakness you discovered during your experiments 
-
-The acoustic preference is a binary flag, so every user is treated as either an acoustic fan or a non-acoustic fan. The Acoustic Electronic edge case exposed this: the profile wanted electronic music but had the acoustic flag on, which penalized the best genre matches and pushed unrelated ambient songs up the list.
-
-
----
-
-## 7. Evaluation
-
-How did you check your system
-
-- Which user profiles you tested  
-
-Seven user profiles were tested. Four standard (Default Pop / Happy, High-Energy Pop, Chill Lofi, Deep Intense Rock) and three edge cases (Sad Bangers, Ghost Genre, Acoustic Electronic).
-
-- What you looked for in the recommendations 
-
-I looked for whether the top results matched each profile's stated genre and mood, and whether conflicting preferences returned irrelevant songs.
-
-- What surprised you  
-
-One thing that surprised me was how Gym Hero appeared at #2 for the happy pop user even though it is a workout anthem, not a feel-good track. The algorithm recipe rewards a genre match regardless of whether the mood also lines up.
-
-- Any simple tests or comparisons you ran  
-
-As a simple test, I compared Default Pop / Happy against High-Energy Pop. Switching the mood from happy to intense moved Gym Hero from #2 to #1. I also compared Sad Bangers against Ghost Genre, which are both edge cases. They broke the genre signal, but differently: one had a genre match that didn't satisfy the energy target; the other had no genre match at all.
-
----
-
-## 8. Future Work
-
-If you had more time, how would you improve this recommender
-
-- Additional features or preferences  
-
-Valence, danceability, and tempo are already stored for every song but never scored. Adding them would let the system tell apart songs that are rhythmically different, even when genre and mood match.
-
-- Better ways to explain recommendations  
-
-Right now the explanation just lists which features added points. It would be more useful to also flag why a song ranked lower.
-
-- Improving diversity among the top results  
-
-The top five can include the same artist more than once if their songs score similarly. A simple rule capping each artist at one slot would make the results more varied.
-
-- Handling more complex user tastes  
-
-Right now each user has one favorite genre and one favorite mood. Letting users say they like more than one genre would better reflect how people actually listen to music.
-
----
-
-## 9. Personal Reflection
-
-A few sentences about what you learned:
-
-- What surprised you about how your system behaved
-
-Small weight changes barely shifted the top result but completely reordered everything below it. This showed how sensitive ranking systems are.
-
-- How did building this change how you think about real music recommenders
-
-Real apps must score dozens of features to provide a personalized experience, and must consider many more factors. 
-
-- Where do you think human judgment still matters, even if the model seems "smart"
-
-- I think human judgement will still matter in the curation of songs, especially in music genres that are rare or unexplored.
-
----
-
-## 10. Final Reflection
-
-- What was your biggest learning moment during this project?
-
-Evaluating which features I wanted to use in the scoring algorithm, and creating the final Algorithm Recipe.
-
-- How did using AI tools help you, and when did you need to double-check them?
-
-AI tools sped up score analysis. I had to double-check song rank numbers after changing weights, since earlier outputs reflected a different configuration.
-
-- What surprised you about how simple algorithms can still "feel" like recommendations?
-
-Even four features produced results that felt intuitive. The lofi rankings especially felt right despite the small catalog of songs.
-
-- What would you try next if you extended this project?
-
-I would add valence and tempo to the score and let users list more than one favorite genre. 
+- [Model Card](model_card.md)
