@@ -138,13 +138,13 @@ The query specifies "no acoustic stuff," and the application successfully return
 
 `favorite_genre = "k-pop"` does not exist in the catalog. Genre weight (0.35) is dead for every song. Results compete on mood, energy, and acoustic preference only, with a score ceiling of ~0.65. This profile passes the confidence guardrail, but the batch runner shows the degradation clearly.
 
-![Ghost Genre batch output](./phase4_ghost_genre_output.png)
+![Ghost Genre batch output](./assets/phase4_ghost_genre_output.png)
 
 ## 6. Design Decisions
 
 **Why keep the original weighted scorer instead of replacing it with embeddings?**
 
-The original scorer is deterministic, meaning every recommendation can be fully explained by the formula. Wrapping it with an LLM on both ends achieves a natural language interface without changing the retrieval logic. This separation also makes the confidence guardrail interpretable: scores fall on a known 0–1 scale, so thresholds at 0.30 and 0.50 have a clear meaning.
+The original scorer is deterministic, meaning every recommendation can be fully explained by the formula. Wrapping it with an LLM on both ends achieves a natural language interface without changing the retrieval logic.
 
 **Why Gemini 2.5 Flash Lite for both the parser and the narrator?**
 
@@ -170,17 +170,17 @@ Binary genre and mood fields are the scorer's most significant weakness. When a 
 
 ## 8. Reflection
 
-Building the RAG layer on top of the prototype made the system feel qualitatively different, even though the scorer did not change. The LLM parser absorbs the ambiguity of natural language and produces a structured profile in under a second. The narrator grounds its explanation in the actual retrieved songs rather than inventing attributes. Together, they transform a rigid batch process into something that feels conversational, which is a meaningful shift in user experience from the same underlying logic.
+Building the RAG layer on top of the prototype improved the system, even though the scorer did not change. The LLM parser removes the ambiguity of natural language and produces a structured profile. The narrator grounds its explanation in the actual retrieved songs. Together, they transform a batch process into a conversational user experience.
 
 The confidence guardrail was the most instructive part of the build. It reinforced the importance of not instinctively trusting the output when building reliable AI systems.
 
-The catalog's sparsity also reinforces the importance of data quality in shaping user experience.Realrecommendation systems invest heavily in catalog coverage for this reason.
+The catalog's sparsity also reinforces the importance of data quality in shaping user experience. Real recommendation systems invest heavily in catalog coverage for this reason.
 
 ## 9. Reflection and Ethics: Thinking Critically About Your AI
 
 **What are the limitations or biases in your system?**
 
-The two most significant limitations are catalog sparsity and binary matching. Thirteen of the fifteen genres appear only once, so the scorer's behavior degrades quickly for any query outside pop or lofi. Genre and mood are matched with exact string equality, meaning a fan of "indie pop" gets no credit toward a "pop" query, and "metal" and "rock" are treated as completely unrelated. The scoring weights (0.35 for genre, 0.30 for mood, etc.) were set based on intuition, not learned from data. Because the weights were not derived from user behavior, they may not reflect how actual people prioritize these features. The acoustic preference is also a binary flag, meaning the system treats every user as either an acoustic fan or a non-acoustic fan.
+The two most significant limitations are catalog sparsity and binary matching. Thirteen of the fifteen genres appear only once, so the scorer's behavior degrades quickly for any query outside pop or lofi. Genre and mood are matched with exact string equality, meaning a fan of "indie pop" gets no credit toward a "pop" query, and "metal" and "rock" are treated as completely unrelated. Because the weights were not derived from user behavior, they may not reflect how actual people prioritize these features. The acoustic preference is also a binary flag, meaning the system treats every user as either an acoustic fan or a non-acoustic fan.
 
 **Could your AI be misused, and how would you prevent that?**
 
