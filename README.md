@@ -192,7 +192,7 @@ The quality of results below the top one or two was surprising. Once the genre a
 
 **Collaboration with AI during this project**
 
-AI was useful throughout the build, but not uniformly. One genuinely helpful suggestion was using the `response_schema` parameter in the Gemini API call for `parse_query`. Rather than prompting the model to return JSON and then manually parsing and validating it, the `response_schema` parameter accepts the Pydantic model directly and guarantees the output matches the schema. This removed the need for parsing errors.
+AI was useful throughout the build, but not uniformly. One helpful suggestion was using the `response_schema` parameter in the Gemini API call for `parse_query`. Rather than prompting the model to return JSON and then manually parsing and validating it, the `response_schema` parameter accepts the Pydantic model directly and guarantees the output matches the schema. This removed the need for parsing errors.
 
 One suggestion that was flawed was early in the design, AI recommended adding semantic embeddings for genre and mood matching to replace the binary string equality. That is a real limitation of the current system, but the proposed fix was far too complicated for an 18-song catalog. The complexity was not proportionate to the problem.
 

@@ -1,18 +1,8 @@
 # 🎧 Model Card: Music Recommender Simulation
 
-## 1. Model Name  
-
-Give your model a short, descriptive name.  
-
-TuneRecipe
-
----
+## 1. Song Seeker  
 
 ## 2. Intended Use  
-
-Describe what your recommender is designed to do and who it is for. 
-
-Prompts:  
 
 - What kind of recommendations does it generate  
 
@@ -26,13 +16,13 @@ The recommender assumes each user has exactly one favorite genre, one favorite m
 
 This is built for classroom exploration. It is a simulation, not a tool meant for real listeners.
 
+- How has the system changed from the original prototype
+
+The original system only accepted structured profiles. The current version adds a RAG pipeline: a natural language query is parsed into a structured profile by Gemini 2.5 Flash Lite, the original scorer retrieves the top five songs, and a second Gemini call generates a narrative explaining why each song fits. A confidence guardrail blocks results that score below 0.30.
+
 ---
 
 ## 3. How the Model Works  
-
-Explain your scoring approach in simple language.  
-
-Prompts:  
 
 - What features of each song are used (genre, energy, mood, etc.)  
 
@@ -50,15 +40,13 @@ Each feature that matches or is close to the user's preference adds points. Genr
 
 The starter code just returned the first five songs in the file without any scoring. The scoring logic was added to make recommendations based on actual user preferences.
 
-Avoid code here. Pretend you are explaining the idea to a friend who does not program.
+- What does the RAG layer add on top of the scorer
+
+Two LLM calls wrap the scorer. The first is `parse_query`, which takes a natural language description and returns a structured profile in the format the scorer expects. The second is `narrate_recommendations`, which receives the retrieved songs and their scores and generates a conversational explanation. Neither call invents attributes or suggests songs outside the retrieved list.
 
 ---
 
 ## 4. Data  
-
-Describe the dataset the model uses.  
-
-Prompts:  
 
 - How many songs are in the catalog  
 
@@ -78,11 +66,7 @@ Most genres and moods have only one song each. Low-energy music like meditation 
 
 ---
 
-## 5. Strengths  
-
-Where does your system seem to work well  
-
-Prompts:  
+## 5. Strengths   
 
 - User types for which it gives reasonable results  
 
@@ -99,10 +83,6 @@ The Chill Lofi profile returned Library Rain and Midnight Coding at the top, whi
 ---
 
 ## 6. Limitations and Bias 
-
-Where the system struggles or behaves unfairly. 
-
-Prompts:  
 
 - Features it does not consider  
 
@@ -126,11 +106,7 @@ The acoustic preference is a binary flag, so every user is treated as either an 
 
 ---
 
-## 7. Evaluation  
-
-How you checked whether the recommender behaved as expected. 
-
-Prompts:  
+## 7. Evaluation    
 
 - Which user profiles you tested  
 
@@ -150,11 +126,7 @@ As a simple test, I compared Default Pop / Happy against High-Energy Pop. Switch
 
 ---
 
-## 8. Future Work  
-
-Ideas for how you would improve the model next.  
-
-Prompts:  
+## 8. Future Work   
 
 - Additional features or preferences  
 
@@ -174,11 +146,7 @@ Right now each user has one favorite genre and one favorite mood. Letting users 
 
 ---
 
-## 9. Personal Reflection  
-
-A few sentences about your experience.  
-
-Prompts:  
+## 9. Personal Reflection   
 
 - What you learned about recommender systems  
 
@@ -190,4 +158,16 @@ Small weight changes barely shifted the top result but completely reordered ever
 
 - How this changed the way you think about music recommendation apps  
 
-Real apps must score dozens of features to provide a personalized experience, and must consider many more factors. 
+Real apps must score dozens of features to provide a personalized experience, and must consider many more factors.
+
+---
+
+## 10. AI Collaboration
+
+- One instance where AI gave a helpful suggestion
+
+One helpful suggestion was using the `response_schema` parameter in the Gemini API call for `parse_query`. Rather than prompting the model to return JSON and then manually parsing and validating it, the `response_schema` parameter accepts the Pydantic model directly and guarantees the output matches the schema. This removed the need for parsing errors.
+
+- One instance where AI gave a flawed suggestion
+
+One suggestion that was flawed was early in the design, AI recommended adding semantic embeddings for genre and mood matching to replace the binary string equality. That is a real limitation of the current system, but the proposed fix was far too complicated for an 18-song catalog. The complexity was not proportionate to the problem.
