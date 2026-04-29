@@ -122,6 +122,10 @@ python -m pytest
 
 Scores are calculated from the actual weighted formula against `data/songs.csv`. The screenshots below are examples of inputs and the resulting AI outputs in the streamlit app.
 
+### DEMO Run
+
+![DEMO Application Run](./assets/demo.gif)
+
 ### Example 1: Strong match (Late-night study session)
 
 The query maps cleanly to lofi/chill. Library Rain and Midnight Coding are the only two songs that match on both genre and mood, putting them far ahead of the rest of the catalog.
